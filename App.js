@@ -1,7 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import React from 'react';
-import { Login, Signup, Welcome ,VerifyEmailScreen ,HomeScreen ,MapScreen ,StoreDetailsScreen,CompleteRegistrationScreen,AccountScreen ,Header , Footer, AddressDetailsScreen} from "./screens";
+import { Login, Signup, Welcome ,CartScreen,CheckoutScreen,VerifyEmailScreen,ProductDetailScreen ,HomeScreen ,MapScreen ,StoreDetailsScreen,CompleteRegistrationScreen,AccountScreen ,Header , Footer, AddressDetailsScreen} from "./screens";
 
 const Stack = createNativeStackNavigator();
 
@@ -82,6 +82,37 @@ export default function App() {
           headerShown: false
         }}
         />
+
+      <Stack.Screen 
+        name="StoreDetailsScreen"
+        component={StoreDetailsScreen} 
+        options={{
+          headerShown: false
+        }}
+        />
+            <Stack.Screen 
+        name="ProductDetailScreen"
+        component={ProductDetailScreen} 
+        options={{
+          headerShown: false
+        }}
+        />
+            <Stack.Screen 
+        name="CartScreen"
+        component={CartScreen} 
+        options={{
+          headerShown: false
+        }}
+        />
+
+      <Stack.Screen 
+        name="CheckoutScreen"
+        component={CheckoutScreen} 
+        options={{
+          headerShown: false
+        }}
+        />
+        
 
 
       </Stack.Navigator>
