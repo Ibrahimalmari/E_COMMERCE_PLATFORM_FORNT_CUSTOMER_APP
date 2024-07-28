@@ -18,7 +18,7 @@ const Footer = () => {
         <Feather name="search" size={24} color="black" style={styles.footerIcon} />
         <Text style={styles.footerText}>بحث</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.footerItem}>
+      <TouchableOpacity style={styles.footerItem} onPress={() => navigation.navigate('MyOrdersScreen')}>
         <Feather name="shopping-bag" size={24} color="black" style={styles.footerIcon} />
         <Text style={styles.footerText}>الطلبات</Text>
       </TouchableOpacity>

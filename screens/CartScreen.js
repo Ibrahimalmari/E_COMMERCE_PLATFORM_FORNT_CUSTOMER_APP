@@ -1,33 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const CartScreen = () => {
-  const navigation = useNavigation();
+const CartScreen = ({ route, navigation }) => {
+  const { deliveryCost, deliveryTime, storeId } = route.params;
 
   const [customerId, setCustomerId] = useState(null);
   const [cartItems, setCartItems] = useState([]);
   const [totalPrice, setTotalPrice] = useState(0);
   const [storeName, setStoreName] = useState('');
   const [itemQuantities, setItemQuantities] = useState({});
+  const [loading, setLoading] = useState(true); // إضافة حالة التحميل
 
   useEffect(() => {
     retrieveCustomerId();
   }, []);
 
   useEffect(() => {
-    if (customerId) {
-      fetchCartItems(customerId);
+    if (customerId && storeId) {
+      fetchCartItems(customerId, storeId);
     }
-  }, [customerId]);
+  }, [customerId, storeId]);
 
   const retrieveCustomerId = async () => {
     try {
       const storedCustomerId = await AsyncStorage.getItem('customer_id');
-      if (storedCustomerId !== null) {
+      if (storedCustomerId) {
         setCustomerId(storedCustomerId);
       } else {
         console.log('No customerId stored');
@@ -37,16 +38,23 @@ const CartScreen = () => {
     }
   };
 
-  const fetchCartItems = async (customerId) => {
+  const fetchCartItems = async (customerId, storeId) => {
+    setLoading(true); // بدء التحميل
     try {
-      const response = await axios.get(`http://10.0.2.2:8000/api/customer/cart/${customerId}`);
-      console.log('Cart items fetched:', response.data.cart);
-      setCartItems(response.data.cart);
-      calculateTotalPrice(response.data.cart);
-      initializeItemQuantities(response.data.cart);
-      setStoreName(response.data.store_name); // Set store name
+      const response = await axios.get(`http://10.0.2.2:8000/api/customer/cart/${customerId}/${storeId}`);
+      if (response.data.cart) {
+        console.log('Cart items fetched:', response.data.cart);
+        setCartItems(response.data.cart);
+        calculateTotalPrice(response.data.cart);
+        initializeItemQuantities(response.data.cart);
+        setStoreName(response.data.store_name || ''); // Ensure storeName is set
+      } else {
+        console.error('No cart data returned');
+      }
     } catch (error) {
       console.error('Error fetching cart items:', error);
+    } finally {
+      setLoading(false); // انتهاء التحميل
     }
   };
 
@@ -72,7 +80,7 @@ const CartScreen = () => {
         quantity: updatedQuantities[itemId]
       });
       console.log('Quantity updated successfully:', response.data.message);
-      fetchCartItems(customerId);
+      fetchCartItems(customerId, storeId);
     } catch (error) {
       console.error('Error updating quantity:', error);
     }
@@ -88,7 +96,7 @@ const CartScreen = () => {
           quantity: updatedQuantities[itemId]
         });
         console.log('Quantity updated successfully:', response.data.message);
-        fetchCartItems(customerId);
+        fetchCartItems(customerId, storeId);
       } catch (error) {
         console.error('Error updating quantity:', error);
       }
@@ -111,11 +119,11 @@ const CartScreen = () => {
   };
 
   const navigateToCheckout = () => {
-    navigation.navigate('CheckoutScreen', { cartItems, totalPrice });
+    navigation.navigate('CheckoutScreen', { cartItems, totalPrice, deliveryCost, deliveryTime });
   };
 
   const roundToNearest500 = (price) => {
-    return Math.round(price / 500) * 500;
+    return Math.ceil(price / 500) * 500;
   };
 
   const renderItem = ({ item }) => (
@@ -127,7 +135,7 @@ const CartScreen = () => {
       <View style={styles.itemDetails}>
         <Text style={styles.itemName}>{item.product.name}</Text>
         <Text style={styles.storeName}>{item.product.store_name}</Text>
-        <Text style={styles.itemPrice}>{item.product.price} SYP</Text>
+        <Text style={styles.itemPrice}>{roundToNearest500(item.product.price)} SYP</Text>
       </View>
       <View style={styles.quantityContainer}>
         <TouchableOpacity style={styles.quantityButton} onPress={() => decrementQuantity(item.id)}>
@@ -148,33 +156,44 @@ const CartScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <FontAwesome name="arrow-left" size={24} color="#365D9B" />
-        </TouchableOpacity>
-        <Text style={styles.backButtonText}>عودة إلى المتجر</Text>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>سلة التسوق</Text>
-          <Text style={styles.headerStoreName}>{storeName}</Text>
+      {loading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#365D9B" style={styles.loader} />
+          <Text style={styles.loadingText}>جاري تحميل البيانات...</Text>
         </View>
-      </View>
+      )}
+      
+      {!loading && (
+        <>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <FontAwesome name="arrow-left" size={24} color="#365D9B" />
+            </TouchableOpacity>
+            <Text style={styles.backButtonText}>عودة إلى المتجر</Text>
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerTitle}>سلة التسوق</Text>
+              <Text style={styles.headerStoreName}>{storeName}</Text>
+            </View>
+          </View>
 
-      <FlatList
-        data={cartItems}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={{ flexGrow: 1 }}
-        ListEmptyComponent={() => (
-          <Text style={styles.emptyCartText}>سلة التسوق فارغة.</Text>
-        )}
-      />
+          <FlatList
+            data={cartItems}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id.toString()}
+            contentContainerStyle={{ flexGrow: 1 }}
+            ListEmptyComponent={() => (
+              <Text style={styles.emptyCartText}>سلة التسوق فارغة.</Text>
+            )}
+          />
 
-      <View style={styles.totalContainer}>
-        <Text style={styles.totalText}>الإجمالي: {roundToNearest500(totalPrice)} SYP</Text>
-        <TouchableOpacity style={styles.checkoutButton} onPress={navigateToCheckout}>
-          <Text style={styles.checkoutButtonText}>الدفع</Text>
-        </TouchableOpacity>
-      </View>
+          <View style={styles.totalContainer}>
+            <Text style={styles.totalText}>الإجمالي: {roundToNearest500(totalPrice)} SYP</Text>
+            <TouchableOpacity style={styles.checkoutButton} onPress={navigateToCheckout}>
+              <Text style={styles.checkoutButtonText}>الدفع</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
     </View>
   );
 };
@@ -193,10 +212,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   backButtonText: {
     color: '#365D9B',
@@ -294,6 +309,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    zIndex: 1000,
+  },
+  loader: {
+    marginBottom: 20,
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#365D9B',
+    fontWeight: 'bold',
   },
 });
 

@@ -12,6 +12,7 @@ const StoreDetailsScreen = () => {
   const [cart, setCart] = useState([]);
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [totalPrice, setTotalPrice] = useState(0);
+  const [cartStatus, setCartStatus] = useState(null); // New state for cart status
   const navigation = useNavigation();
   const route = useRoute();
   const { storeId, distance, deliveryCost, deliveryTime, cartItem } = route.params;
@@ -24,19 +25,21 @@ const StoreDetailsScreen = () => {
         const storeData = storeResponse.data;
         const categoriesResponse = await axios.get(`http://10.0.2.2:8000/api/store/getStoreDetails/${storeId}`);
         const categoriesData = categoriesResponse.data.categories;
-
         setStoreDetails(storeData.store);
         setCategoriesWithProducts(categoriesData);
 
         const customerId = await AsyncStorage.getItem('customer_id');
         if (customerId) {
           const cartResponse = await axios.get(`http://10.0.2.2:8000/api/checkCart/${customerId}/${storeId}`);
+          console.log(cartResponse.data)
+
           if (cartResponse.data.exists) {
-            setTotalQuantity(cartResponse.data.totalQuantity);
-            setTotalPrice(cartResponse.data.totalPrice);
-            // Fetch the cart items and set them in the cart state
-            // You might need to adjust this based on your cart item structure
-            // setCart(cartResponse.data.cartItems);
+            setCartStatus(cartResponse.data.cartStatus); // Set cart status
+            if (cartResponse.data.cartStatus !== 'completed') {
+              setTotalQuantity(cartResponse.data.totalQuantity);
+              setTotalPrice(cartResponse.data.totalPrice);
+              
+            }
           }
         }
       } catch (error) {
@@ -47,7 +50,7 @@ const StoreDetailsScreen = () => {
     };
 
     fetchStoreDetails();
-  }, [storeId, isFocused]); // Added isFocused to dependencies
+  }, [storeId, isFocused]);
 
   useEffect(() => {
     if (cartItem) {
@@ -113,12 +116,11 @@ const StoreDetailsScreen = () => {
     }
   };
 
-  
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#365D9B" />
+        <Text style={styles.loadingText}>جارٍ تحميل البيانات...</Text>
       </View>
     );
   }
@@ -237,11 +239,11 @@ const StoreDetailsScreen = () => {
         contentContainerStyle={styles.categoryList}
       />
 
-      {totalQuantity > 0 && (
+      {totalQuantity > 0 && cartStatus !== 'completed' && (
         <TouchableOpacity
           style={styles.cartButton}
           onPress={() =>
-            navigation.navigate('CartScreen')
+            navigation.navigate('CartScreen', { deliveryCost, deliveryTime ,storeId })
           }
         >
           <Text style={styles.cartButtonText}>
@@ -262,6 +264,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#365D9B',
   },
   imageContainer: {
     position: 'relative',

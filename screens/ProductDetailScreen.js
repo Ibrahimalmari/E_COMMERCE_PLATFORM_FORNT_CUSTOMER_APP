@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ScrollView, View, Text, StyleSheet, Image, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { ScrollView, View, Text, StyleSheet, Image, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -11,9 +11,11 @@ const ProductDetailScreen = ({ route, navigation }) => {
   const [totalPrice, setTotalPrice] = useState('0');
   const [customerToken, setCustomerToken] = useState(null);
   const [customerId, setCustomerId] = useState(null);
+  const [loading, setLoading] = useState(false); // حالة التحميل
 
   useEffect(() => {
     const fetchCustomerData = async () => {
+      setLoading(true); // بدء التحميل
       try {
         const token = await AsyncStorage.getItem('customerToken');
         const id = await AsyncStorage.getItem('customer_id');
@@ -23,6 +25,8 @@ const ProductDetailScreen = ({ route, navigation }) => {
         setCustomerId(id);
       } catch (error) {
         console.error('Failed to fetch customer data from AsyncStorage', error);
+      } finally {
+        setLoading(false); // إيقاف التحميل في النهاية
       }
     };
 
@@ -44,6 +48,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
   };
 
   const handleAddToCart = async () => {
+    setLoading(true); // بدء التحميل
     try {
       if (!customerToken || !customerId) {
         Alert.alert('Error', 'Customer ID or token not found. Please login again.');
@@ -57,7 +62,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
         product_id: product.id,
         quantity: quantity,
         notes: additionalNotes,
-
+        store_id: storeId
       }, {
         headers: {
           Authorization: `Bearer ${customerToken}`,
@@ -86,6 +91,8 @@ const ProductDetailScreen = ({ route, navigation }) => {
     } catch (error) {
       Alert.alert('Error', 'Failed to add product to cart. Please try again.');
       console.error(error.response ? error.response.data : error.message);
+    } finally {
+      setLoading(false); // إيقاف التحميل في النهاية
     }
   };
 
@@ -105,6 +112,12 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {loading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#365D9B" />
+        </View>
+      )}
+
       <Image source={{ uri: `http://10.0.2.2:8000/products/${product.images}` }} style={styles.productImage} />
       
       <View style={styles.iconsContainer}>
@@ -332,6 +345,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)', // خلفية شبه شفافة
+    zIndex: 1000, // تأكد من ظهور مكون التحميل فوق العناصر الأخرى
   },
 });
 

@@ -13,7 +13,7 @@ import AddressDetailsScreen from "./AddressDetailsScreen";
 import ProductDetailScreen from "./ProductDetailScreen";
 import CartScreen from "./CartScreen";
 import CheckoutScreen from "./CheckoutScreen";
-
+import MyOrdersScreen from "./MyOrdersScreen";
 export {
     Login,
     Welcome,
@@ -29,5 +29,6 @@ export {
     AddressDetailsScreen,
     ProductDetailScreen,
     CartScreen,
+    MyOrdersScreen,
     CheckoutScreen,
 }
