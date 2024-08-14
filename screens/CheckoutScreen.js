@@ -19,6 +19,7 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [showDiscountField, setShowDiscountField] = useState(false);
   const [discountCode, setDiscountCode] = useState('');
   const [discountValue, setDiscountValue] = useState(0);
+  const [discountPercentage, setDiscountPercentage] = useState(0); // نسبة الخصم
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState([]);
@@ -84,13 +85,50 @@ const CheckoutScreen = ({ route, navigation }) => {
     setPaymentMethod(method);
   };
 
-  const handleApplyDiscount = () => {
-    if (discountCode === 'DISCOUNT10') {
-      setDiscountValue(totalPrice * 0.1); // خصم 10% في حال كان الكود صحيح
-    } else {
-      setDiscountValue(0); // لا يوجد خصم في حال كان الكود غير صحيح
+  const handleApplyDiscount = async () => {
+    try {
+      const response = await axios.post(
+        'http://10.0.2.2:8000/api/apply-discount',
+        { code: discountCode },
+        {
+          headers: {
+            Authorization: `Bearer ${customerToken}`,
+          },
+        }
+      );
+  
+      if (response.data.success) {
+        const { value, percentage } = response.data.discount;
+  
+        if (value) {
+          setDiscountValue(value);
+        } else if (percentage) {
+          setDiscountPercentage(percentage);
+          setDiscountValue(totalPrice * (percentage / 100));
+        } else {
+          setDiscountValue(0);
+        }
+  
+        Alert.alert('نجاح', response.data.message);
+      } else {
+        Alert.alert('خطأ', 'كود الخصم غير صحيح أو منتهي الصلاحية.');
+        setDiscountValue(0);
+      }
+    } catch (error) {
+      if (error.response && error.response.status === 404) {
+        // عرض رسالة خطأ للمستخدم بدون إظهار تفاصيل الخطأ في console
+        Alert.alert('خطأ', 'كود الخصم غير صحيح أو منتهي الصلاحية.');
+      } else {
+        // في حالة وجود خطأ آخر غير مرتبط بالتحقق من الكود
+        console.error('Error applying discount:', error);
+        Alert.alert('خطأ', 'حدث خطأ أثناء تطبيق كود الخصم.');
+      }
+  
+      setDiscountValue(0);
     }
   };
+  
+  
 
   const roundToNearest500 = (value) => {
     return Math.ceil(value / 500) * 500;
@@ -178,27 +216,45 @@ const CheckoutScreen = ({ route, navigation }) => {
       cluster: 'eu',
       encrypted: true,
     });
-
+  
     const channel = pusher.subscribe('my-channel-customer');
-    channel.bind('my-event-customer', (data) => {
+    channel.bind('my-event-customer', async (data) => {
       if (waitingForNotification) {
         setWaitingForNotification(false); // تم تلقي الإشعار
-        setNotificationMessage(data.message);
+        setNotificationMessage(data.message); 
+        console.log(data)
+        const totalAmount = data.invoice_amount + data.delivery_fee + data.tax - data.discount;
+        if (data.message.includes('طلب قيد التجهيز سوف يتم تجهزو خلال الوقت المتوقع')) {
+          try {
+            await axios.post('http://10.0.2.2:8000/api/transactions/store', {
+              store_id: data.store_id,
+              order_id: data.order_id,
+              delivery_fee:data.delivery_fee,
+              total_amount: totalAmount,
+              amount_paid: totalAmount,
+            });
+            console.log('Transaction updated successfully');
+          } catch (error) {
+            console.error('Error updating transaction:', error);
+          }
+        }
+        
         setNotificationVisible(true); // عرض الإشعار
-
+  
         // الانتظار لبضع ثوانٍ قبل الانتقال إلى الصفحة التالية
         setTimeout(() => {
           setNotificationVisible(false); // إخفاء الإشعار
-          navigation.navigate('HomeScreen', { orderId: data.orderId }); // الانتقال إلى صفحة HomeScreen بعد تلقي الإشعار
-        }, 5000); // الانتظار لمدة 2 ثانية
+          navigation.navigate('HomeScreen', { orderId: data.order_id }); // الانتقال إلى صفحة HomeScreen بعد تلقي الإشعار
+        }, 5000); // الانتظار لمدة 5 ثوانٍ
       }
     });
-
+  
     return () => {
       channel.unbind_all();
       pusher.unsubscribe('my-channel-customer');
     };
-  }, [waitingForNotification, navigation]);
+  }, [waitingForNotification, navigation, customerToken]);
+  
 
 
   if (isLoading) {
@@ -313,28 +369,32 @@ const CheckoutScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View> 
 
-      <TouchableOpacity style={styles.discountToggle} onPress={() => setShowDiscountField(!showDiscountField)}>
-<Text style={styles.discountToggleText}>لديك كود خصم؟</Text>
-<FontAwesome
-  name={showDiscountField ? 'angle-up' : 'angle-down'}
-  size={24}
-  color="#365D9B"
-/>
-</TouchableOpacity>
+      
 
-{showDiscountField && (
-<View style={styles.discountContainer}>
-  <TextInput
-    style={styles.discountInput}
-    placeholder="ادخل كود الخصم"
-    value={discountCode}
-    onChangeText={setDiscountCode}
-  />
-  <TouchableOpacity style={styles.applyDiscountButton} onPress={handleApplyDiscount}>
-    <Text style={styles.applyDiscountButtonText}>تطبيق</Text>
-  </TouchableOpacity>
-</View>
-)}
+      <View style={styles.discountContainer}>
+              {showDiscountField ? (
+          <>
+            <TextInput
+              style={styles.discountInput}
+              placeholder="أدخل كود الخصم"
+              value={discountCode}
+              onChangeText={setDiscountCode}
+            />
+            <TouchableOpacity onPress={handleApplyDiscount} style={styles.applyButton}>
+              <Text style={styles.applyButtonText}>تطبيق</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity onPress={() => setShowDiscountField(true)}>
+            <Text style={styles.discountLink}>هل لديك كود خصم؟</Text>
+          </TouchableOpacity>
+        )}
+        {discountValue > 0 && (
+          <Text style={styles.discountApplied}>
+            تم تطبيق خصم بقيمة {discountValue} ل.س{discountPercentage > 0 && ` (${discountPercentage}%)`}
+          </Text>
+        )}
+      </View>
 
       <View style={styles.totalContainer}>
         <Text style={styles.totalText}>إجمالي السعر: {totalPrice.toFixed(2)} ل.س</Text>

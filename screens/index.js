@@ -14,11 +14,16 @@ import ProductDetailScreen from "./ProductDetailScreen";
 import CartScreen from "./CartScreen";
 import CheckoutScreen from "./CheckoutScreen";
 import MyOrdersScreen from "./MyOrdersScreen";
+import OrderDetails from "./OrderDetails";
+import MyCart from "./MyCart";
+import SearchDuringType from "./SearchDuringType";
+import MyFavoritesScreen from "./MyFavoritesScreen";
 export {
     Login,
     Welcome,
     Signup,
     VerifyEmailScreen,
+    MyFavoritesScreen,
     Header,
     Footer,
     HomeScreen,
@@ -31,4 +36,7 @@ export {
     CartScreen,
     MyOrdersScreen,
     CheckoutScreen,
+    OrderDetails,
+    MyCart,
+    SearchDuringType,
 }

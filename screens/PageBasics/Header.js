@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const Header = ({ city, modalVisible, setModalVisible }) => {
+const Header = ({ city, modalVisible, setModalVisible, deliveryCost, deliveryTime }) => {
   const navigation = useNavigation();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -48,10 +48,13 @@ const Header = ({ city, modalVisible, setModalVisible }) => {
         </TouchableOpacity>
       </View>
       <View style={styles.headerRight}>
-        <TouchableOpacity style={styles.headerIconContainer}>
-          <Feather name="heart" size={25} color="white" style={styles.headerIcon} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerIconContainer} onPress={() => navigation.navigate('Cart')}>
+      <TouchableOpacity 
+        style={styles.headerIconContainer}
+        onPress={() => navigation.navigate('MyFavoritesScreen')} // الانتقال إلى شاشة المفضلة
+      >
+        <Feather name="heart" size={25} color="white" style={styles.headerIcon} />
+      </TouchableOpacity>
+        <TouchableOpacity style={styles.headerIconContainer} onPress={() => navigation.navigate('MyCart')}>
           <Feather name="shopping-cart" size={25} color="white" style={styles.headerIcon} />
         </TouchableOpacity>
       </View>

@@ -4,16 +4,18 @@ import { FontAwesome } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location'; // استيراد مكتبة الموقع
 
 const CartScreen = ({ route, navigation }) => {
-  const { deliveryCost, deliveryTime, storeId } = route.params;
+  const { deliveryCost, deliveryTime, storeId } = route.params || {};
 
   const [customerId, setCustomerId] = useState(null);
   const [cartItems, setCartItems] = useState([]);
   const [totalPrice, setTotalPrice] = useState(0);
   const [storeName, setStoreName] = useState('');
   const [itemQuantities, setItemQuantities] = useState({});
-  const [loading, setLoading] = useState(true); // إضافة حالة التحميل
+  const [loading, setLoading] = useState(true);
+  const [calculatedDeliveryCost, setCalculatedDeliveryCost] = useState(deliveryCost || 0);
 
   useEffect(() => {
     retrieveCustomerId();
@@ -24,6 +26,12 @@ const CartScreen = ({ route, navigation }) => {
       fetchCartItems(customerId, storeId);
     }
   }, [customerId, storeId]);
+
+  useEffect(() => {
+    if (!deliveryCost && storeId) {
+      calculateDeliveryCost(storeId);
+    }
+  }, [storeId]);
 
   const retrieveCustomerId = async () => {
     try {
@@ -39,7 +47,7 @@ const CartScreen = ({ route, navigation }) => {
   };
 
   const fetchCartItems = async (customerId, storeId) => {
-    setLoading(true); // بدء التحميل
+    setLoading(true);
     try {
       const response = await axios.get(`http://10.0.2.2:8000/api/customer/cart/${customerId}/${storeId}`);
       if (response.data.cart) {
@@ -47,19 +55,18 @@ const CartScreen = ({ route, navigation }) => {
         setCartItems(response.data.cart);
         calculateTotalPrice(response.data.cart);
         initializeItemQuantities(response.data.cart);
-        setStoreName(response.data.store_name || ''); // Ensure storeName is set
+        setStoreName(response.data.store_name || '');
       } else {
         console.error('No cart data returned');
       }
     } catch (error) {
       console.error('Error fetching cart items:', error);
-    } finally {
-      setLoading(false); // انتهاء التحميل
     }
+    setLoading(false);
   };
 
   const calculateTotalPrice = (cartItems) => {
-    const total = cartItems.reduce((acc, item) => acc + item.items_price, 0);
+    const total = cartItems.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
     setTotalPrice(total);
   };
 
@@ -71,16 +78,63 @@ const CartScreen = ({ route, navigation }) => {
     setItemQuantities(quantities);
   };
 
+  const calculateDeliveryCost = async (storeId) => {
+    try {
+      // الحصول على إحداثيات الموقع الحالي للمستخدم
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.error('Permission to access location was denied');
+        return;
+      }
+      const userLocation = await Location.getCurrentPositionAsync({});
+      const userLatitude = userLocation.coords.latitude;
+      const userLongitude = userLocation.coords.longitude;
+
+      // جلب إحداثيات المتجر
+      const response = await axios.get(`http://10.0.2.2:8000/api/store/getStoreAddress/${storeId}`);
+      const storeLatitude = response.data.store.latitude;
+      const storeLongitude = response.data.store.longitude;
+
+      // حساب المسافة بين المستخدم والمتجر باستخدام صيغة هافرسين
+      const distance = calculateDistance(userLatitude, userLongitude, storeLatitude, storeLongitude);
+
+      // حساب تكلفة التوصيل (كل كيلومتر = 4000)
+      const cost = distance * 4000;
+      setCalculatedDeliveryCost(cost);
+      console.log(distance)
+      console.log(calculatedDeliveryCost)
+
+    } catch (error) {
+      console.error('Error calculating delivery cost:', error);
+    }
+  };
+
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // نصف قطر الأرض بالكيلومترات
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c; // المسافة بالكيلومترات
+    return distance;
+  };
+
   const incrementQuantity = async (itemId) => {
     const updatedQuantities = { ...itemQuantities };
     updatedQuantities[itemId]++;
     setItemQuantities(updatedQuantities);
     try {
-      const response = await axios.post(`http://10.0.2.2:8000/api/cart/update-quantity/${itemId}`, {
+      await axios.post(`http://10.0.2.2:8000/api/cart/update-quantity/${itemId}`, {
         quantity: updatedQuantities[itemId]
       });
-      console.log('Quantity updated successfully:', response.data.message);
-      fetchCartItems(customerId, storeId);
+      const updatedCart = cartItems.map(item =>
+        item.id === itemId ? { ...item, quantity: updatedQuantities[itemId] } : item
+      );
+      setCartItems(updatedCart);
+      calculateTotalPrice(updatedCart);
     } catch (error) {
       console.error('Error updating quantity:', error);
     }
@@ -92,11 +146,14 @@ const CartScreen = ({ route, navigation }) => {
       updatedQuantities[itemId]--;
       setItemQuantities(updatedQuantities);
       try {
-        const response = await axios.post(`http://10.0.2.2:8000/api/cart/update-quantity/${itemId}`, {
+        await axios.post(`http://10.0.2.2:8000/api/cart/update-quantity/${itemId}`, {
           quantity: updatedQuantities[itemId]
         });
-        console.log('Quantity updated successfully:', response.data.message);
-        fetchCartItems(customerId, storeId);
+        const updatedCart = cartItems.map(item =>
+          item.id === itemId ? { ...item, quantity: updatedQuantities[itemId] } : item
+        );
+        setCartItems(updatedCart);
+        calculateTotalPrice(updatedCart);
       } catch (error) {
         console.error('Error updating quantity:', error);
       }
@@ -105,8 +162,8 @@ const CartScreen = ({ route, navigation }) => {
 
   const removeItem = async (itemId) => {
     try {
-      const response = await axios.delete(`http://10.0.2.2:8000/api/cart/remove-item/${itemId}`);
-      console.log('Item removed successfully:', response.data.message);
+      await axios.delete(`http://10.0.2.2:8000/api/cart/remove-item/${itemId}`);
+      console.log('Item removed successfully');
       const updatedCart = cartItems.filter(item => item.id !== itemId);
       setCartItems(updatedCart);
       const updatedQuantities = { ...itemQuantities };
@@ -119,7 +176,7 @@ const CartScreen = ({ route, navigation }) => {
   };
 
   const navigateToCheckout = () => {
-    navigation.navigate('CheckoutScreen', { cartItems, totalPrice, deliveryCost, deliveryTime });
+    navigation.navigate('CheckoutScreen', { cartItems, totalPrice, deliveryCost: calculatedDeliveryCost, deliveryTime });
   };
 
   const roundToNearest500 = (price) => {
@@ -135,7 +192,7 @@ const CartScreen = ({ route, navigation }) => {
       <View style={styles.itemDetails}>
         <Text style={styles.itemName}>{item.product.name}</Text>
         <Text style={styles.storeName}>{item.product.store_name}</Text>
-        <Text style={styles.itemPrice}>{roundToNearest500(item.product.price)} SYP</Text>
+        <Text style={styles.itemPrice}>{roundToNearest500(item.product.price * item.quantity)} SYP</Text>
       </View>
       <View style={styles.quantityContainer}>
         <TouchableOpacity style={styles.quantityButton} onPress={() => decrementQuantity(item.id)}>
@@ -156,14 +213,12 @@ const CartScreen = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
-      {loading && (
+      {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#365D9B" style={styles.loader} />
-          <Text style={styles.loadingText}>جاري تحميل البيانات...</Text>
+          <ActivityIndicator size="large" color="#365D9B" />
+          <Text style={styles.loadingText}>جاري تحميل سلة التسوق...</Text>
         </View>
-      )}
-      
-      {!loading && (
+      ) : (
         <>
           <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -203,6 +258,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     paddingTop: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#365D9B',
   },
   header: {
     flexDirection: 'row',
@@ -309,26 +374,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 5,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    zIndex: 1000,
-  },
-  loader: {
-    marginBottom: 20,
-  },
-  loadingText: {
-    fontSize: 18,
-    color: '#365D9B',
-    fontWeight: 'bold',
   },
 });
 

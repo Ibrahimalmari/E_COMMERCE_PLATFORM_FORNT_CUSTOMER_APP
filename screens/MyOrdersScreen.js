@@ -43,24 +43,27 @@ const MyOrdersScreen = () => {
     const imageUrl = `http://10.0.2.2:8000/stores/${store.coverPhoto.split('.')[0]}`;
 
     return (
-      <View style={styles.orderContainer}>
+      <TouchableOpacity 
+        style={styles.orderContainer}
+        onPress={() => navigation.navigate('OrderDetails', { orderId: item.id })}
+      >
         <View style={styles.orderHeader}>
-          <Image source={{ uri: imageUrl }} style={styles.storeImage} />
           <View style={styles.storeInfo}>
+            <Image source={{ uri: imageUrl }} style={styles.storeImage} />
             <Text style={styles.storeName}>{store.name}</Text>
+          </View>
+          <View style={styles.orderInfo}>
             <Text style={styles.orderNumber}>رقم الطلب #{item.order_numbers}</Text>
             <Text style={styles.orderDate}>{new Date(created_at).toLocaleString()}</Text>
           </View>
         </View>
         <View style={styles.separator} />
-        {cart.items.map((cartItem, index) => (
-          <View key={index} style={styles.productContainer}>
-            <Text style={styles.productQuantity}>الكمية: {cartItem.quantity}</Text>
-            <Text style={styles.productPrice}>السعر: {cartItem.product.price} ل.س</Text>
-            <Text style={styles.orderStatus}>الحالة: {order_status}</Text>
-          </View>
-        ))}
-      </View>
+        <View style={styles.productDetails}>
+          <Text style={styles.orderStatus}>الحالة: {order_status}</Text>
+          <Text style={styles.productPrice}>السعر الكلي: {cart.items.reduce((total, cartItem) => total + cartItem.product.price * cartItem.quantity, 0)} ل.س</Text>
+          <Text style={styles.productQuantity}>الكمية: {cart.items.reduce((total, cartItem) => total + cartItem.quantity, 0)}</Text>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -130,23 +133,23 @@ const styles = StyleSheet.create({
   },
   orderHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-    justifyContent: 'space-between', // Add this line
   },
   storeImage: {
-    width: 50, // Increased size
-    height: 50, // Increased size
-    borderRadius: 25, // Adjusted for larger size
-    marginLeft: 8, // Adjusted for RTL layout
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 8,
   },
   storeInfo: {
-    flex: 1,
-    marginRight: 8, // Adjusted for RTL layout
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   storeName: {
     fontSize: 16,
     fontWeight: 'bold',
+    marginRight: 8,
   },
   orderInfo: {
     alignItems: 'flex-end',
@@ -164,10 +167,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#eee',
     marginVertical: 8,
   },
-  productContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+  productDetails: {
+    marginTop: 8,
   },
   productQuantity: {
     fontSize: 14,

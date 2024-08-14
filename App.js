@@ -1,7 +1,10 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import React from 'react';
-import { Login, Signup, Welcome ,MyOrdersScreen,CartScreen,CheckoutScreen,VerifyEmailScreen,ProductDetailScreen ,HomeScreen ,MapScreen ,StoreDetailsScreen,CompleteRegistrationScreen,AccountScreen ,Header , Footer, AddressDetailsScreen} from "./screens";
+import { Login, Signup, Welcome ,MyCart,
+  MyOrdersScreen,OrderDetails,CartScreen,CheckoutScreen,VerifyEmailScreen,ProductDetailScreen 
+  ,HomeScreen ,MapScreen ,StoreDetailsScreen,CompleteRegistrationScreen,AccountScreen ,Header 
+  , Footer, AddressDetailsScreen,SearchDuringType ,MyFavoritesScreen} from "./screens";
 
 const Stack = createNativeStackNavigator();
 
@@ -121,7 +124,36 @@ export default function App() {
         }}
         />
         
+        <Stack.Screen 
+        name="OrderDetails"
+        component={OrderDetails} 
+        options={{
+          headerShown: false
+        }}
+        />
 
+      <Stack.Screen 
+        name="MyCart"
+        component={MyCart} 
+        options={{
+          headerShown: false
+        }}
+        />
+         <Stack.Screen 
+        name="SearchDuringType"
+        component={SearchDuringType} 
+        options={{
+          headerShown: false
+        }}
+        />
+
+      <Stack.Screen 
+        name="MyFavoritesScreen"
+        component={MyFavoritesScreen} 
+        options={{
+          headerShown: false
+        }}
+        />
 
       </Stack.Navigator>
     </NavigationContainer>

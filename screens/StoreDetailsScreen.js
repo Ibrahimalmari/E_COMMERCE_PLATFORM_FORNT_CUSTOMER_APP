@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 import { useNavigation, useRoute, useIsFocused } from '@react-navigation/native';
@@ -13,44 +13,54 @@ const StoreDetailsScreen = () => {
   const [totalQuantity, setTotalQuantity] = useState(0);
   const [totalPrice, setTotalPrice] = useState(0);
   const [cartStatus, setCartStatus] = useState(null); // New state for cart status
+  const [isFavorite, setIsFavorite] = useState(false); // New state for favorite status
   const navigation = useNavigation();
   const route = useRoute();
   const { storeId, distance, deliveryCost, deliveryTime, cartItem } = route.params;
   const isFocused = useIsFocused();
 
-  useEffect(() => {
-    const fetchStoreDetails = async () => {
-      try {
-        const storeResponse = await axios.get(`http://10.0.2.2:8000/api/DisplayStoreToCustomer/${storeId}`);
-        const storeData = storeResponse.data;
-        const categoriesResponse = await axios.get(`http://10.0.2.2:8000/api/store/getStoreDetails/${storeId}`);
-        const categoriesData = categoriesResponse.data.categories;
-        setStoreDetails(storeData.store);
-        setCategoriesWithProducts(categoriesData);
+  const fetchStoreDetails = useCallback(async () => {
+    setLoading(true); // Ensure the loading indicator shows when re-fetching data
+    try {
+      const storeResponse = await axios.get(`http://10.0.2.2:8000/api/DisplayStoreToCustomer/${storeId}`);
+      const storeData = storeResponse.data;
+      const categoriesResponse = await axios.get(`http://10.0.2.2:8000/api/store/getStoreDetails/${storeId}`);
+      const categoriesData = categoriesResponse.data.categories;
+      setStoreDetails(storeData.store);
+      setCategoriesWithProducts(categoriesData);
 
-        const customerId = await AsyncStorage.getItem('customer_id');
-        if (customerId) {
-          const cartResponse = await axios.get(`http://10.0.2.2:8000/api/checkCart/${customerId}/${storeId}`);
-          console.log(cartResponse.data)
+      const customerId = await AsyncStorage.getItem('customer_id');
+      if (customerId) {
+        const cartResponse = await axios.get(`http://10.0.2.2:8000/api/checkCart/${customerId}/${storeId}`);
+        console.log(cartResponse.data)
 
-          if (cartResponse.data.exists) {
-            setCartStatus(cartResponse.data.cartStatus); // Set cart status
-            if (cartResponse.data.cartStatus !== 'completed') {
-              setTotalQuantity(cartResponse.data.totalQuantity);
-              setTotalPrice(cartResponse.data.totalPrice);
-              
-            }
+        if (cartResponse.data.exists) {
+          setCartStatus(cartResponse.data.cartStatus); // Set cart status
+          if (cartResponse.data.cartStatus !== 'completed') {
+            setTotalQuantity(cartResponse.data.totalQuantity);
+            setTotalPrice(cartResponse.data.totalPrice);
+            
           }
         }
-      } catch (error) {
-        console.error('Error fetching store details:', error);
-      } finally {
-        setLoading(false);
+        const favoriteResponse = await axios.get(`http://10.0.2.2:8000/api/favorite/check/${customerId}/${storeId}`);
+        setIsFavorite(favoriteResponse.data.isFavorite);
       }
-    };
+    
+    } catch (error) {
+      console.error('Error fetching store details:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId]);
 
+
+  
+
+  useEffect(() => {
     fetchStoreDetails();
-  }, [storeId, isFocused]);
+  }, [fetchStoreDetails, isFocused]);
+
+  
 
   useEffect(() => {
     if (cartItem) {
@@ -83,6 +93,32 @@ const StoreDetailsScreen = () => {
       }
     }
   };
+
+  const handleFavoritePress = async () => {
+    const customerId = await AsyncStorage.getItem('customer_id');
+  
+    if (customerId) {
+      try {
+        if (isFavorite) {
+          await axios.post('http://10.0.2.2:8000/api/favorite/remove', {
+            customer_id: customerId,
+            store_id: storeId,
+          });
+          console.log('Store removed from favorites');
+        } else {
+          await axios.post('http://10.0.2.2:8000/api/favorite/add', {
+            customer_id: customerId,
+            store_id: storeId,
+          });
+          console.log('Store added to favorites');
+        }
+        setIsFavorite(!isFavorite);
+      } catch (error) {
+        console.error('Error toggling favorite:', error);
+      }
+    }
+  };
+  
 
   const handleBackPress = async () => {
     if (totalQuantity > 0) {
@@ -200,9 +236,10 @@ const StoreDetailsScreen = () => {
         <Text style={styles.storeNameText}>{storeName}</Text>
       </View>
       <View style={styles.iconOverlay}>
-        <TouchableOpacity style={styles.iconButton}>
-          <FontAwesome name="heart" size={20} color="#ff6347" />
-        </TouchableOpacity>
+      <TouchableOpacity style={styles.iconButton} onPress={handleFavoritePress}>
+        <FontAwesome name="heart" size={20} color={isFavorite ? "#ff6347" : "#bbb"} />
+      </TouchableOpacity>
+
         <TouchableOpacity style={styles.iconButton}>
           <Feather name="share-2" size={20} color="#365D9B" />
         </TouchableOpacity>

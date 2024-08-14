@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ScrollView, TextInput,Animated  ,Button} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
@@ -7,20 +7,27 @@ import Modal from 'react-native-modal';
 import Header from './PageBasics/Header';
 import Footer from './PageBasics/Footer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';  // Import FontAwesome
 
-const HomeScreen = () => {
+const HomeScreen = ({ route }) => {
+  const { orderId } = route.params || {}; // Handle undefined route.params
   const [restaurants, setRestaurants] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation();
   const [city, setCity] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [modalVisibleForRate, setModalVisibleForRate] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [visitorMode, setVisitorMode] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [userLocation, setUserLocation] = useState(null);
+  const [orderStatus, setOrderStatus] = useState(null);
+  const [rating, setRating] = useState(0);
+  const [feedback, setFeedback] = useState('');
   const deliveryCostPerKm = 4000;
   const carSpeed = 40; // سرعة السيارة بالكيلومتر في الساعة
+  console.log(orderId)
 
   useEffect(() => {
     const getCurrentCity = async () => {
@@ -36,6 +43,26 @@ const HomeScreen = () => {
 
     getCurrentCity();
   }, []);
+
+
+  useEffect(() => {
+    let intervalId;
+
+    if (orderId) {
+      fetchOrderStatus(); // Fetch immediately
+
+      intervalId = setInterval(() => {
+        fetchOrderStatus(); // Fetch periodically
+      }, 5000); // Check every 5 seconds
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [orderId]);
 
   useEffect(() => {
     const fetchUserId = async () => {
@@ -98,7 +125,12 @@ const HomeScreen = () => {
       if (data && data.store) {
         const restaurantsWithDetails = data.store.map(restaurant => ({
           ...restaurant,
-          deliveryTime: getRandomDeliveryTime(),
+          deliveryTime: calculateDeliveryTime(
+            userLocation?.latitude || 0,
+            userLocation?.longitude || 0,
+            parseFloat(restaurant.latitude || 0),
+            parseFloat(restaurant.longitude || 0)
+          ),
         }));
         setRestaurants(restaurantsWithDetails);
       } else {
@@ -112,13 +144,51 @@ const HomeScreen = () => {
     }
   };
 
+
+  const fetchOrderStatus = async () => {
+    if (!orderId) return; // Check if orderId is present
+    console.log(orderId)
+    try {
+      const response = await fetch(`http://10.0.2.2:8000/api/orders/getOrderStatus/${orderId}`);
+      const data = await response.json();
+      if (data && data.status) {
+        setOrderStatus(data.status);
+        if (data.status === 'تم تسليم الطلب') {
+          setModalVisibleForRate(true);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch order status', error);
+    }
+  };
+
+  const handleRating = async () => {
+    if (!orderId) return; // Check if orderId is present
+
+    try {
+      const response = await fetch(`http://10.0.2.2:8000/api/orders/rate${orderId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ rating, feedback }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setModalVisibleForRate(false);
+        setOrderStatus(null);  // Clear the order status if needed
+        navigation.navigate('HomeScreen');         
+        console.log('Rating submitted successfully');
+      }
+    } catch (error) {
+      console.error('Failed to submit rating', error);
+    }
+  };
+
+
   useEffect(() => {
     fetchRestaurants();
-  }, []);
-
-  const getRandomDeliveryTime = () => {
-    return Math.floor(Math.random() * 60) + 30;
-  };
+  }, [userLocation]);
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
@@ -137,41 +207,35 @@ const HomeScreen = () => {
     return deg * (Math.PI / 180);
   };
 
+  const calculateDeliveryTime = (lat1, lon1, lat2, lon2) => {
+    const distance = calculateDistance(lat1, lon1, lat2, lon2);
+    return Math.floor((distance / carSpeed) * 60) + 30; // الوقت المتوقع للتوصيل بالدقائق
+  };
+
   const renderRestaurantItem = ({ item }) => {
     let filename = item.coverPhoto.split('.')[0];
     let imageUrl = `http://10.0.2.2:8000/stores/${filename}`;
 
-    let distance = 0;
-    if (userLocation) {
-      const { latitude: lat1, longitude: lon1 } = userLocation;
-      if (item.latitude && item.longitude) {
-        const lat2 = parseFloat(item.latitude);
-        const lon2 = parseFloat(item.longitude);
-
-        distance = calculateDistance(lat1, lon1, lat2, lon2);
-      } else {
-        console.warn(`Missing latitude or longitude data for item:`, item);
-      }
-    }
-
-    const deliveryCost = distance * deliveryCostPerKm;
-    const deliveryTime = getRandomDeliveryTime();
-
-    console.log('Navigating to StoreDetailsScreen with:', {
-      storeId: item.id,
-      distance,
-      deliveryCost,
-      deliveryTime,
-    });
+    const deliveryCost = calculateDistance(
+      userLocation?.latitude || 0,
+      userLocation?.longitude || 0,
+      parseFloat(item.latitude || 0),
+      parseFloat(item.longitude || 0)
+    ) * deliveryCostPerKm;
 
     return (
       <TouchableOpacity 
         style={styles.restaurantItem} 
         onPress={() => navigation.navigate('StoreDetailsScreen', {
           storeId: item.id,
-          distance,
+          distance: calculateDistance(
+            userLocation?.latitude || 0,
+            userLocation?.longitude || 0,
+            parseFloat(item.latitude || 0),
+            parseFloat(item.longitude || 0)
+          ),
           deliveryCost,
-          deliveryTime,
+          deliveryTime: item.deliveryTime,
         })}
       >
         <View style={styles.restaurantBox}>
@@ -182,9 +246,9 @@ const HomeScreen = () => {
             <Text style={styles.restaurantDelivery}>
               تكلفة التوصيل: {Math.ceil(deliveryCost / 500) * 500} SYP
             </Text>
-
-
-
+            <Text style={styles.restaurantDelivery}>
+              وقت التوصيل المتوقع: {item.deliveryTime} دقيقة
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -223,7 +287,46 @@ const HomeScreen = () => {
         city={selectedAddress ? selectedAddress : city}
         modalVisible={modalVisible}
         setModalVisible={setModalVisible}
+        deliveryCost={deliveryCostPerKm}
+        deliveryTime={calculateDeliveryTime(
+          userLocation?.latitude || 0,
+          userLocation?.longitude || 0,
+          parseFloat(restaurants[0]?.latitude || 0),
+          parseFloat(restaurants[0]?.longitude || 0)
+        )}
       />
+
+    <Modal
+        isVisible={modalVisibleForRate}
+        swipeDirection={['down']}
+        onSwipeComplete={() => setModalVisibleForRate(false)}
+        onBackdropPress={() => setModalVisibleForRate(false)}
+        style={styles.modal}
+      >
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>تقييم الطلب</Text>
+          <TextInput
+            style={styles.feedbackInput}
+            placeholder="أضف ملاحظاتك هنا..."
+            value={feedback}
+            onChangeText={setFeedback}
+          />
+          <Text style={styles.ratingTitle}>تقييم: {rating}</Text>
+          <View style={styles.ratingContainer}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity key={star} onPress={() => setRating(star)}>
+                <FontAwesome
+                  name={rating >= star ? 'star' : 'star-o'}
+                  size={30}
+                  color={rating >= star ? '#FFD700' : '#d3d3d3'}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Button title="أرسل التقييم" onPress={handleRating} />
+        </View>
+      </Modal>
+
 
       <Modal
         isVisible={modalVisible}
@@ -281,25 +384,37 @@ const HomeScreen = () => {
 
         <Text style={styles.orderText}>ماذا ترغب في طلبه؟</Text>
         <View style={styles.filterContainer}>
-          <TouchableOpacity style={styles.filterItem}>
+          <TouchableOpacity 
+            style={styles.filterItem}
+            onPress={() => navigation.navigate('SearchDuringType', { type: 'مطعم' })}
+          >
             <View style={styles.filterIconContainer}>
               <Image source={require("../assets/food.png")} style={styles.filterIcon} />
             </View>
             <Text style={styles.filterText}>مطعم</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterItem}>
+          <TouchableOpacity 
+            style={styles.filterItem}
+            onPress={() => navigation.navigate('SearchDuringType', { type: 'سوبرماركت' })}
+          >
             <View style={styles.filterIconContainer}>
               <Image source={require("../assets/supermarket.jpg")} style={styles.filterIcon} />
             </View>
             <Text style={styles.filterText}>سوبرماركت</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterItem}>
+          <TouchableOpacity 
+            style={styles.filterItem}
+            onPress={() => navigation.navigate('SearchDuringType', { type: 'متاجر' })}
+          >
             <View style={styles.filterIconContainer}>
               <Image source={require("../assets/store.jpg")} style={styles.filterIcon} />
             </View>
             <Text style={styles.filterText}>متاجر</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterItem}>
+          <TouchableOpacity 
+            style={styles.filterItem}
+            onPress={() => navigation.navigate('SearchDuringType', { type: 'صيدلية' })}
+          >
             <View style={styles.filterIconContainer}>
               <Image source={require("../assets/pharmacy.png")} style={styles.filterIcon} />
             </View>
@@ -498,6 +613,38 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+  },
+  modal: {
+    justifyContent: 'flex-end',
+    margin: 0,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 22,
+    borderTopLeftRadius: 17,
+    borderTopRightRadius: 17,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  feedbackInput: {
+    height: 50,
+    borderColor: '#ddd',
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 20,
+  },
+  ratingTitle: {
+    fontSize: 18,
+    marginBottom: 8,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
 });
 
